@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <errno.h>
 
-// TODO: Alignment
+const size_t ALIGNMENT = 8;
 
 struct LinkedMallocHeader {
     struct LinkedMallocHeader *previous;
@@ -19,6 +19,9 @@ void *malloc(size_t size) {
     if (size == 0) return NULL;
 
     size_t required_space = size + sizeof(struct LinkedMallocHeader);
+
+    // Round up size to ensure alignment
+    required_space += (ALIGNMENT - (required_space % ALIGNMENT)) % ALIGNMENT;
 
     // Find where to place header + data
     struct LinkedMallocHeader *previous_header = NULL;
