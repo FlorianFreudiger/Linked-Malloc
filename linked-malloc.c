@@ -15,7 +15,8 @@ struct LinkedMallocHeader {
 
 // TODO: Mutex/Rwlock
 
-void *start = NULL;
+struct LinkedMallocHeader *start = NULL;
+
 
 void debug_print_header_chain() {
     struct LinkedMallocHeader *current = start;
@@ -57,8 +58,20 @@ size_t calculate_required_size(size_t requested_size) {
     return required_size;
 }
 
+// Add an initial block at the start, this simplifies freeing the first real block a lot
+void malloc_initial() {
+    size_t start_size = calculate_required_size(0);
+
+    start = sbrk((intptr_t) start_size);
+    start->prev = NULL;
+    start->next = NULL;
+    start->total_size = start_size;
+}
+
 void *malloc(size_t size) {
     if (size == 0) return NULL;
+
+    if (start == NULL) malloc_initial();
 
     size_t required_space = calculate_required_size(size);
 
@@ -96,26 +109,15 @@ void *malloc(size_t size) {
     }
 
     // Modify last found and its next header to insert into chain:
-    if (previous_header != NULL) {
-        destination_header->next = previous_header->next;
+    destination_header->next = previous_header->next;
 
-        // Only update previous header if it is not being marked to overwrite
-        if (previous_header->total_size != 0) {
-            // First update next header, since the reference to it will be overwritten in the second step
-            if (previous_header->next != NULL) {
-                previous_header->next->prev = destination_header;
-            }
-
-            // Update last found header
-            previous_header->next = destination_header;
-        }
-
-    } else {
-        destination_header->next = NULL;
-
-        // If this is the very first header update start
-        start = destination_header;
+    // First update next header, since the reference to it will be overwritten in the second step
+    if (previous_header->next != NULL) {
+        previous_header->next->prev = destination_header;
     }
+
+    // Update last found header
+    previous_header->next = destination_header;
 
     destination_header->prev = previous_header;
     destination_header->total_size = required_space;
@@ -127,29 +129,16 @@ void free(void *ptr) {
 
     struct LinkedMallocHeader *header = malloc_ptr_to_header(ptr);
 
-    if (header->prev != NULL) {
-        header->prev->next = header->next;
+    // Connect previous header to the header after this one
+    header->prev->next = header->next;
 
-        if (header->next != NULL) {
-            // Free by connecting previous and next header to another, "skipping" element in chain
-            header->next->prev = header->prev;
+    if (header->next != NULL) {
+        // Free by connecting previous and next header to another, "skipping" element in chain
+        header->next->prev = header->prev;
 
-        } else {
-            // If header is the end of the chain free the excess memory
-            sbrk(-(intptr_t) header->total_size);
-        }
     } else {
-        if (header->next != NULL) {
-            // By setting size to 0 allow element it to be overwritten
-            header->total_size = 0;
-
-        } else {
-            // If header is the end of the chain free the excess memory
-            sbrk(-(intptr_t) header->total_size);
-
-            // If this also was the first header reset start
-            start = NULL;
-        }
+        // If header is the end of the chain free the excess memory
+        sbrk(-(intptr_t) header->total_size);
     }
 }
 
