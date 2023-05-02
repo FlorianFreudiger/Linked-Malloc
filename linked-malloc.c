@@ -15,6 +15,27 @@ struct LinkedMallocHeader {
 
 void *start = NULL;
 
+void debug_print_header_chain() {
+    struct LinkedMallocHeader *current = start;
+    fprintf(stderr, "Start = %p\n", current);
+
+    int i = 0;
+    while (current != NULL) {
+        fprintf(stderr, "%02d: prev=%p, current=%p, next=%p, size=%zu\n", i++,
+                current->prev, current, current->next, current->total_size);
+
+        // Catch loops
+        if (current == current->next) {
+            fprintf(stderr, "Loop detected!\n");
+            break;
+        }
+
+        current = current->next;
+    }
+
+    fprintf(stderr, "Program break at %p\n\n", sbrk(0));
+}
+
 void *malloc(size_t size) {
     if (size == 0) return NULL;
 
@@ -67,8 +88,6 @@ void *malloc(size_t size) {
         // First update next header, since the reference to it will be overwritten in the second step
         if (previous_header->next != NULL) {
             previous_header->next->prev = destination_header;
-        } else {
-            start = destination_header;
         }
 
         // Update last found header
