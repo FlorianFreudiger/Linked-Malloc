@@ -138,11 +138,20 @@ void free(void *ptr) {
 
 void *calloc(size_t nmemb, size_t size) {
     // TODO: Handle overflows
-    return malloc(nmemb * size);
+    size_t total_size = nmemb * size;
+
+    void *ptr = malloc(total_size);
+    memset(ptr, 0, total_size);
+    return ptr;
 }
 
 void *realloc(void *ptr, size_t size) {
     if (ptr == NULL) return malloc(size);
+
+    if (size == 0) {
+        free(ptr);
+        return NULL;
+    }
 
     struct LinkedMallocHeader *header = ptr - sizeof(struct LinkedMallocHeader);
     size_t old_size = header->total_size - sizeof(struct LinkedMallocHeader);
