@@ -2,6 +2,8 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <errno.h>
+#include <string.h>
+#include <stdbool.h>
 
 const size_t ALIGNMENT = 8;
 
@@ -132,4 +134,54 @@ void free(void *ptr) {
             start = NULL;
         }
     }
+}
+
+void *calloc(size_t nmemb, size_t size) {
+    // TODO: Handle overflows
+    return malloc(nmemb * size);
+}
+
+void *realloc(void *ptr, size_t size) {
+    if (ptr == NULL) return malloc(size);
+
+    struct LinkedMallocHeader *header = ptr - sizeof(struct LinkedMallocHeader);
+    size_t old_size = header->total_size - sizeof(struct LinkedMallocHeader);
+
+    if (size == old_size) {
+        // No action needed
+        return ptr;
+    }
+
+    size_t new_total_size = size + sizeof(struct LinkedMallocHeader);
+
+    // Simple resize possible if...
+    bool can_resize_in_place =
+            //... no extra space needed
+            size < old_size
+
+            //... at the end of the chain
+            || header->next == NULL
+
+            //... there is a large enough gap to the next header
+            || (void *) header + new_total_size <= (void *) header->next;
+
+
+    if (can_resize_in_place) {
+        // Update size
+        header->total_size = new_total_size;
+
+        // If at end: Reserve or free size change
+        if (header->next == NULL) {
+            sbrk((intptr_t) size - (intptr_t) old_size);
+        }
+
+        return ptr;
+    }
+
+    // Else allocate new block, copy data over and free old block
+    void *new_ptr = malloc(size);
+    memcpy(new_ptr, ptr, size);
+    free(ptr);
+
+    return new_ptr;
 }
