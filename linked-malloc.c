@@ -38,13 +38,29 @@ void debug_print_header_chain() {
     fprintf(stderr, "Program break at %p\n\n", sbrk(0));
 }
 
+
+struct LinkedMallocHeader *malloc_ptr_to_header(void *ptr) {
+    return ptr - sizeof(struct LinkedMallocHeader);
+}
+
+void *header_to_malloc_pointer(struct LinkedMallocHeader *header) {
+    return (void *) header + sizeof(struct LinkedMallocHeader);
+}
+
+size_t calculate_required_size(size_t requested_size) {
+    // Add header size
+    size_t required_size = requested_size + sizeof(struct LinkedMallocHeader);
+
+    // Round up size for alignment
+    required_size += (ALIGNMENT - (required_size % ALIGNMENT)) % ALIGNMENT;
+
+    return required_size;
+}
+
 void *malloc(size_t size) {
     if (size == 0) return NULL;
 
-    size_t required_space = size + sizeof(struct LinkedMallocHeader);
-
-    // Round up size to ensure alignment
-    required_space += (ALIGNMENT - (required_space % ALIGNMENT)) % ALIGNMENT;
+    size_t required_space = calculate_required_size(size);
 
     // Find where to place header + data
     struct LinkedMallocHeader *previous_header = NULL;
@@ -60,7 +76,6 @@ void *malloc(size_t size) {
             size_t room = (void *) destination_header->next - current_data_end;
             if (room >= required_space) {
                 destination_header = current_data_end;
-                // fprintf(stderr, "Found space, room=%zu, required=%zu\n", room, required_space);
                 break;
             }
         }
@@ -104,13 +119,13 @@ void *malloc(size_t size) {
 
     destination_header->prev = previous_header;
     destination_header->total_size = required_space;
-    return (void *) destination_header + sizeof(struct LinkedMallocHeader);
+    return header_to_malloc_pointer(destination_header);
 }
 
 void free(void *ptr) {
     if (ptr == NULL) return;
 
-    struct LinkedMallocHeader *header = ptr - sizeof(struct LinkedMallocHeader);
+    struct LinkedMallocHeader *header = malloc_ptr_to_header(ptr);
 
     if (header->prev != NULL) {
         header->prev->next = header->next;
@@ -155,20 +170,20 @@ void *realloc(void *ptr, size_t size) {
         return NULL;
     }
 
-    struct LinkedMallocHeader *header = ptr - sizeof(struct LinkedMallocHeader);
-    size_t old_size = header->total_size - sizeof(struct LinkedMallocHeader);
+    struct LinkedMallocHeader *header = malloc_ptr_to_header(ptr);
 
-    if (size == old_size) {
+    size_t old_total_size = header->total_size;
+    size_t new_total_size = calculate_required_size(size);
+
+    if (new_total_size == old_total_size) {
         // No action needed
         return ptr;
     }
 
-    size_t new_total_size = size + sizeof(struct LinkedMallocHeader);
-
     // Simple resize possible if...
     bool can_resize_in_place =
             //... no extra space needed
-            size < old_size
+            new_total_size < old_total_size
 
             //... at the end of the chain
             || header->next == NULL
@@ -182,7 +197,7 @@ void *realloc(void *ptr, size_t size) {
 
         // If at end: Reserve or free size change
         if (header->next == NULL) {
-            sbrk((intptr_t) size - (intptr_t) old_size);
+            sbrk((intptr_t) size - (intptr_t) old_total_size);
         }
 
         return ptr;
