@@ -6,7 +6,7 @@
 const size_t ALIGNMENT = 8;
 
 struct LinkedMallocHeader {
-    struct LinkedMallocHeader *previous;
+    struct LinkedMallocHeader *prev;
     struct LinkedMallocHeader *next;
     size_t total_size; // Header + data size
 };
@@ -47,33 +47,70 @@ void *malloc(size_t size) {
     }
 
     if (destination_header == NULL) {
-        // We have reached the end of the linked header list
+        // End of the linked header list reached, ask for more space
 
-        void *new_break = sbrk(required_space);
+        void *new_break = sbrk((intptr_t) required_space);
         if (new_break == (void *) -1) {
             fprintf(stderr, "sbrk syscall failed, error code: %d\n", errno);
         }
 
-        struct LinkedMallocHeader *new_header = new_break;
-        new_header->previous = previous_header;
-        new_header->next = NULL;
-        new_header->total_size = required_space;
-
-        // Update previous header if it exists, if not then this was the very first element
-        if (previous_header != NULL) {
-            previous_header->next = new_header;
-        } else {
-            start = new_header;
-        }
-
-        return (void *) new_header + sizeof(struct LinkedMallocHeader);
+        destination_header = new_break;
     }
 
-    // Found enough space between 2 headers
-    fprintf(stderr, "This should not happen, not yet.\n");
-    return 0;
+    destination_header->prev = previous_header;
+    destination_header->total_size = required_space;
+
+    // Modify last found and its next header to insert into chain:
+    if (previous_header != NULL) {
+        destination_header->next = previous_header->next;
+
+        // First update next header, since the reference to it will be overwritten in the second step
+        if (previous_header->next != NULL) {
+            previous_header->next->prev = destination_header;
+        } else {
+            start = destination_header;
+        }
+
+        // Update last found header
+        previous_header->next = destination_header;
+
+    } else {
+        destination_header->next = NULL;
+
+        // If this is the very first header update start
+        start = destination_header;
+    }
+
+    return (void *) destination_header + sizeof(struct LinkedMallocHeader);
 }
 
 void free(void *ptr) {
     if (ptr == NULL) return;
+
+    struct LinkedMallocHeader *header = ptr - sizeof(struct LinkedMallocHeader);
+
+    if (header->prev != NULL) {
+        header->prev->next = header->next;
+
+        if (header->next != NULL) {
+            // Free by connecting previous and next header to another, "skipping" element in chain
+            header->next->prev = header->prev;
+
+        } else {
+            // If header is the end of the chain free the excess memory
+            sbrk(-(intptr_t) header->total_size);
+        }
+    } else {
+        if (header->next != NULL) {
+            // By setting size to 0 allow element it to be overwritten
+            header->total_size = 0;
+
+        } else {
+            // If header is the end of the chain free the excess memory
+            sbrk(-(intptr_t) header->total_size);
+
+            // If this also was the first header reset start
+            start = NULL;
+        }
+    }
 }
