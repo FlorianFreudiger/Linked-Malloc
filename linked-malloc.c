@@ -52,6 +52,7 @@ void *malloc(size_t size) {
 
     // Iterate through linked headers until we either find a gap big enough or we reach the end
     while (destination_header != NULL) {
+        previous_header = destination_header;
 
         // Check if there's enough space between this and the next header
         if (destination_header->next != NULL) {
@@ -65,7 +66,6 @@ void *malloc(size_t size) {
         }
 
         // If not, iterate to the next header
-        previous_header = destination_header;
         destination_header = destination_header->next;
     }
 
@@ -80,20 +80,20 @@ void *malloc(size_t size) {
         destination_header = new_break;
     }
 
-    destination_header->prev = previous_header;
-    destination_header->total_size = required_space;
-
     // Modify last found and its next header to insert into chain:
     if (previous_header != NULL) {
         destination_header->next = previous_header->next;
 
-        // First update next header, since the reference to it will be overwritten in the second step
-        if (previous_header->next != NULL) {
-            previous_header->next->prev = destination_header;
-        }
+        // Only update previous header if it is not being marked to overwrite
+        if (previous_header->total_size != 0) {
+            // First update next header, since the reference to it will be overwritten in the second step
+            if (previous_header->next != NULL) {
+                previous_header->next->prev = destination_header;
+            }
 
-        // Update last found header
-        previous_header->next = destination_header;
+            // Update last found header
+            previous_header->next = destination_header;
+        }
 
     } else {
         destination_header->next = NULL;
@@ -102,6 +102,8 @@ void *malloc(size_t size) {
         start = destination_header;
     }
 
+    destination_header->prev = previous_header;
+    destination_header->total_size = required_space;
     return (void *) destination_header + sizeof(struct LinkedMallocHeader);
 }
 
@@ -173,7 +175,6 @@ void *realloc(void *ptr, size_t size) {
 
             //... there is a large enough gap to the next header
             || (void *) header + new_total_size <= (void *) header->next;
-
 
     if (can_resize_in_place) {
         // Update size
