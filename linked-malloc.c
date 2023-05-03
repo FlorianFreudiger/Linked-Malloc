@@ -164,9 +164,7 @@ void *calloc_internal(size_t nmemb, size_t size) {
     void *ptr = malloc_internal(total_size);
 
     // Zero content
-    for (size_t i = 0; i < nmemb; ++i) {
-        memset(ptr + i * size, 0, size);
-    }
+    memset(ptr, 0, total_size);
 
     return ptr;
 }
