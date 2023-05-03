@@ -24,8 +24,15 @@ void debug_print_header_chain() {
 
     int i = 0;
     while (current != NULL) {
-        fprintf(stderr, "%02d: prev=%p, current=%p, next=%p, size=%zu\n", i++,
+        fprintf(stderr, "%02d: prev=%p, current=%p, next=%p, size=%zu", i++,
                 current->prev, current, current->next, current->total_size);
+
+        if (current->next != NULL) {
+            size_t gap = (void *) current->next - ((void *) current + current->total_size);
+            fprintf(stderr, ", gap after = %zu\n", gap);
+        } else {
+            fprintf(stderr, "\n");
+        }
 
         // Catch loops
         if (current == current->next) {
@@ -121,6 +128,7 @@ void __attribute__((visibility("default"))) *malloc(size_t size) {
 
     destination_header->prev = previous_header;
     destination_header->total_size = required_space;
+
     return header_to_malloc_pointer(destination_header);
 }
 
@@ -187,13 +195,16 @@ void __attribute__((visibility("default"))) *realloc(void *ptr, size_t size) {
             //... there is a large enough gap to the next header
             || (void *) header + new_total_size <= (void *) header->next;
 
+    // Disable in place resizing here
+    //can_resize_in_place = false;
+
     if (can_resize_in_place) {
         // Update size
         header->total_size = new_total_size;
 
         // If at end: Reserve or free size change
         if (header->next == NULL) {
-            sbrk((intptr_t) size - (intptr_t) old_total_size);
+            sbrk((intptr_t) new_total_size - (intptr_t) old_total_size);
         }
 
         return ptr;
@@ -201,6 +212,11 @@ void __attribute__((visibility("default"))) *realloc(void *ptr, size_t size) {
 
     // Else allocate new block, copy data over and free old block
     void *new_ptr = malloc(size);
+
+    // Uncomment when disabling in place resizing
+    //size_t old_data_size = old_total_size - sizeof(struct LinkedMallocHeader);
+    //size = size < old_data_size ? size : old_data_size;
+
     memcpy(new_ptr, ptr, size);
     free(ptr);
 
