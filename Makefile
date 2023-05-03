@@ -7,7 +7,7 @@ TARGET := linked-malloc.so
 all: linked-malloc.so
 
 $(TARGET): $(SRC)
-	$(CC) $(CFLAGS) -shared -fPIC -o $(TARGET) $(SRC)
+	$(CC) $(CFLAGS) -shared -fPIC -fvisibility=hidden -o $(TARGET) $(SRC)
 
 clean:
 	rm linked-malloc.so

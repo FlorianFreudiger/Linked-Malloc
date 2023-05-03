@@ -68,7 +68,7 @@ void malloc_initial() {
     start->total_size = start_size;
 }
 
-void *malloc(size_t size) {
+void __attribute__((visibility("default"))) *malloc(size_t size) {
     if (size == 0) return NULL;
 
     if (start == NULL) malloc_initial();
@@ -124,7 +124,7 @@ void *malloc(size_t size) {
     return header_to_malloc_pointer(destination_header);
 }
 
-void free(void *ptr) {
+void __attribute__((visibility("default"))) free(void *ptr) {
     if (ptr == NULL) return;
 
     struct LinkedMallocHeader *header = malloc_ptr_to_header(ptr);
@@ -142,7 +142,7 @@ void free(void *ptr) {
     }
 }
 
-void *calloc(size_t nmemb, size_t size) {
+void __attribute__((visibility("default"))) *calloc(size_t nmemb, size_t size) {
     // TODO: Handle overflows
     size_t total_size = nmemb * size;
 
@@ -151,7 +151,7 @@ void *calloc(size_t nmemb, size_t size) {
     return ptr;
 }
 
-void *realloc(void *ptr, size_t size) {
+void __attribute__((visibility("default"))) *realloc(void *ptr, size_t size) {
     if (ptr == NULL) return malloc(size);
 
     if (size == 0) {
