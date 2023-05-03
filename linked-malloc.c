@@ -16,35 +16,11 @@ struct LinkedMallocHeader {
 
 struct LinkedMallocHeader *start = NULL;
 
+// Helper functions
 
-void debug_print_header_chain() {
-    struct LinkedMallocHeader *current = start;
-    fprintf(stderr, "Start = %p\n", current);
-
-    int i = 0;
-    while (current != NULL) {
-        fprintf(stderr, "%02d: prev=%p, current=%p, next=%p, size=%zu", i++,
-                current->prev, current, current->next, current->total_size);
-
-        if (current->next != NULL) {
-            size_t gap = (void *) current->next - ((void *) current + current->total_size);
-            fprintf(stderr, ", gap after = %zu\n", gap);
-        } else {
-            fprintf(stderr, "\n");
-        }
-
-        // Catch loops
-        if (current == current->next) {
-            fprintf(stderr, "Loop detected!\n");
-            break;
-        }
-
-        current = current->next;
-    }
-
-    fprintf(stderr, "Program break at %p\n\n", sbrk(0));
+size_t gap_size_after(struct LinkedMallocHeader *header) {
+    return (void *) header->next - ((void *) header + header->total_size);
 }
-
 
 struct LinkedMallocHeader *malloc_ptr_to_header(void *ptr) {
     return ptr - sizeof(struct LinkedMallocHeader);
@@ -63,6 +39,36 @@ size_t calculate_required_size(size_t requested_size) {
 
     return required_size;
 }
+
+// Debug function, prints start, each element of the chain and program break
+void debug_print_header_chain() {
+    struct LinkedMallocHeader *current = start;
+    fprintf(stderr, "Start = %p\n", current);
+
+    int i = 0;
+    while (current != NULL) {
+        fprintf(stderr, "%02d: prev=%p, current=%p, next=%p, size=%zu", i++,
+                current->prev, current, current->next, current->total_size);
+
+        if (current->next != NULL) {
+            size_t gap = gap_size_after(current);
+            fprintf(stderr, ", gap after = %zu\n", gap);
+        } else {
+            fprintf(stderr, "\n");
+        }
+
+        // Catch loops
+        if (current == current->next) {
+            fprintf(stderr, "Loop detected!\n");
+            break;
+        }
+
+        current = current->next;
+    }
+
+    fprintf(stderr, "Program break at %p\n\n", sbrk(0));
+}
+
 
 // Add an initial block at the start, this simplifies freeing the first real block a lot
 void malloc_initial() {
@@ -91,10 +97,9 @@ void *malloc_internal(size_t size) {
 
         // Check if there's enough space between this and the next header
         if (destination_header->next != NULL) {
-            void *current_data_end = (void *) destination_header + destination_header->total_size;
-            size_t room = (void *) destination_header->next - current_data_end;
-            if (room >= required_space) {
-                destination_header = current_data_end;
+            size_t gap = gap_size_after(destination_header);
+            if (gap >= required_space) {
+                destination_header = (void *) destination_header + destination_header->total_size;
                 break;
             }
         }
@@ -145,7 +150,8 @@ void free_internal(void *ptr) {
 
     } else {
         // If header is the end of the chain free the excess memory
-        sbrk(-(intptr_t) header->total_size);
+        size_t previous_gap = gap_size_after(header->prev);
+        sbrk(-(intptr_t) (header->total_size + previous_gap));
     }
 }
 
