@@ -143,11 +143,18 @@ void __attribute__((visibility("default"))) free(void *ptr) {
 }
 
 void __attribute__((visibility("default"))) *calloc(size_t nmemb, size_t size) {
+    if (nmemb == 0 || size == 0) return NULL;
+
     // TODO: Handle overflows
     size_t total_size = nmemb * size;
 
     void *ptr = malloc(total_size);
-    memset(ptr, 0, total_size);
+
+    // Zero content
+    for (size_t i = 0; i < nmemb; ++i) {
+        memset(ptr + i * size, 0, size);
+    }
+
     return ptr;
 }
 
