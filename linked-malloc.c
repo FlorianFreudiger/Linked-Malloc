@@ -71,7 +71,7 @@ void debug_print_header_chain() {
 
 
 // Add an initial block at the start, this simplifies freeing the first real block a lot
-void malloc_initial() {
+void __attribute__((constructor)) initialize() {
     size_t start_size = calculate_required_size(0);
 
     start = sbrk((intptr_t) start_size);
@@ -82,8 +82,6 @@ void malloc_initial() {
 
 void *malloc_internal(size_t size) {
     if (size == 0) return NULL;
-
-    if (start == NULL) malloc_initial();
 
     size_t required_space = calculate_required_size(size);
 

@@ -46,7 +46,7 @@ $ <application 1>
 $ <application 2>
 $ ...
 ```
-Make sure to specify the path to `linked-malloc.so` is absolute,
+Make sure the path to `linked-malloc.so` is absolute,
 to cover child processes using a different working directory.
 
 ## Future possible improvements
