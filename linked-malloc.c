@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <string.h>
 #include <stdbool.h>
+#include <pthread.h>
 
 const size_t ALIGNMENT = 8;
 
@@ -12,8 +13,6 @@ struct LinkedMallocHeader {
     struct LinkedMallocHeader *next;
     size_t total_size; // Header + data size
 };
-
-// TODO: Mutex/Rwlock
 
 struct LinkedMallocHeader *start = NULL;
 
@@ -75,7 +74,7 @@ void malloc_initial() {
     start->total_size = start_size;
 }
 
-void __attribute__((visibility("default"))) *malloc(size_t size) {
+void *malloc_internal(size_t size) {
     if (size == 0) return NULL;
 
     if (start == NULL) malloc_initial();
@@ -132,7 +131,7 @@ void __attribute__((visibility("default"))) *malloc(size_t size) {
     return header_to_malloc_pointer(destination_header);
 }
 
-void __attribute__((visibility("default"))) free(void *ptr) {
+void free_internal(void *ptr) {
     if (ptr == NULL) return;
 
     struct LinkedMallocHeader *header = malloc_ptr_to_header(ptr);
@@ -150,13 +149,13 @@ void __attribute__((visibility("default"))) free(void *ptr) {
     }
 }
 
-void __attribute__((visibility("default"))) *calloc(size_t nmemb, size_t size) {
+void *calloc_internal(size_t nmemb, size_t size) {
     if (nmemb == 0 || size == 0) return NULL;
 
     // TODO: Handle overflows
     size_t total_size = nmemb * size;
 
-    void *ptr = malloc(total_size);
+    void *ptr = malloc_internal(total_size);
 
     // Zero content
     for (size_t i = 0; i < nmemb; ++i) {
@@ -166,11 +165,11 @@ void __attribute__((visibility("default"))) *calloc(size_t nmemb, size_t size) {
     return ptr;
 }
 
-void __attribute__((visibility("default"))) *realloc(void *ptr, size_t size) {
-    if (ptr == NULL) return malloc(size);
+void *realloc_internal(void *ptr, size_t size) {
+    if (ptr == NULL) return malloc_internal(size);
 
     if (size == 0) {
-        free(ptr);
+        free_internal(ptr);
         return NULL;
     }
 
@@ -211,14 +210,53 @@ void __attribute__((visibility("default"))) *realloc(void *ptr, size_t size) {
     }
 
     // Else allocate new block, copy data over and free old block
-    void *new_ptr = malloc(size);
+    void *new_ptr = malloc_internal(size);
 
     // Uncomment when disabling in place resizing
     //size_t old_data_size = old_total_size - sizeof(struct LinkedMallocHeader);
     //size = size < old_data_size ? size : old_data_size;
 
     memcpy(new_ptr, ptr, size);
-    free(ptr);
+    free_internal(ptr);
 
+    return new_ptr;
+}
+
+// Use a simple global lock in order to guarantee thread-safety
+// This is not really performant, but nor are the allocations, at least this way it is kept simple.
+pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+
+void __attribute__((visibility("default"))) *malloc(size_t size) {
+    pthread_mutex_lock(&lock);
+
+    void *ptr = malloc_internal(size);
+
+    pthread_mutex_unlock(&lock);
+    return ptr;
+}
+
+void __attribute__((visibility("default"))) free(void *ptr) {
+    pthread_mutex_lock(&lock);
+
+    free_internal(ptr);
+
+    pthread_mutex_unlock(&lock);
+}
+
+void __attribute__((visibility("default"))) *calloc(size_t nmemb, size_t size) {
+    pthread_mutex_lock(&lock);
+
+    void *ptr = calloc_internal(nmemb, size);
+
+    pthread_mutex_unlock(&lock);
+    return ptr;
+}
+
+void __attribute__((visibility("default"))) *realloc(void *ptr, size_t size) {
+    pthread_mutex_lock(&lock);
+
+    void *new_ptr = realloc_internal(ptr, size);
+
+    pthread_mutex_unlock(&lock);
     return new_ptr;
 }
