@@ -19,6 +19,18 @@ Block sizes are round up to nearest alignment multiple.
 The alignment is set to 8 bytes by default but can be changed inside linked-malloc.c.
 To disable alignment set it to 1.
 
+Visual model: (created using https://asciiflow.com)
+```
+┌──────┐   ┌──────┬────────────────────┐             ┌──────┬──────┐    ┌──────┬──────┐
+│Header│◄─►│Header│        Data        │◄───────────►│Header│ Data │◄──►│Header│ Data │
+└──────┘   └──────┴────────────────────┘             └──────┴──────┘    └──────┴──────┘
+ ▲                                            ▲                                       ▲
+ │                                            │                                       │
+A first empty header is inserted        A block small                    Program break│
+automatically as a start point        enough will be put                 will be right│
+and won't be freed.                      in between               after the last block│
+```
+
 ## Usage
 Compile linked-malloc via make.
 
@@ -38,6 +50,7 @@ Make sure to specify the path to `linked-malloc.so` is absolute,
 to cover child processes using a different working directory.
 
 ## Future possible improvements
+- Instead of a global lock, only lock the affected previous, current and next blocks
 - Keep track of the largest previous gap and of the chain-end to skip iteration for larger sizes
 - Keep buffer between chain and program break to avoid calling sbrk on every malloc or free of the last element
 - Consolidate gaps between blocks when realloc is resizing in place
